@@ -1,0 +1,41 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装 Tesseract OCR（编译环境）
+        run: choco install tesseract -y
+
+      - name: 准备随包 Tesseract 资源
+        run: |
+          mkdir -p vendor/tesseract
+          cp -r "C:\Program Files\Tesseract-OCR\*" vendor/tesseract/
+
+      - name: 安装 Python 依赖库
+        run: |
+          pip install pyautogui keyboard pynput pillow pytesseract pyinstaller
+
+      - name: 打包 EXE（随包携带 Tesseract）
+        run: |
+          pyinstaller --onefile --name "auto-clicker" --add-data "vendor/tesseract;tesseract" ad_auto_clicker_ocr.py
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-clicker-exe
+          path: dist/auto-clicker.exe
