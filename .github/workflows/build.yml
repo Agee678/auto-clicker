@@ -13,6 +13,9 @@ jobs:
       - name: Checkout 代码
         uses: actions/checkout@v4
 
+      - name: 查看仓库文件
+        run: dir
+
       - name: 安装 Python
         uses: actions/setup-python@v5
         with:
@@ -24,10 +27,10 @@ jobs:
 
       - name: 打包 EXE
         run: |
-          pyinstaller --onefile --name "自动化助手" ad_auto_clicker_gui.py
+          pyinstaller --onefile --name "auto-clicker" ad_auto_clicker_gui.py
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
           name: auto-clicker-exe
-          path: dist/自动化助手.exe
+          path: dist/auto-clicker.exe
