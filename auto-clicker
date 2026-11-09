@@ -1,0 +1,155 @@
+import pyautogui
+import time
+import keyboard
+import numpy as np
+from PIL import ImageGrab
+from pynput.mouse import Controller
+
+# ==================== 配置区 ====================
+AD_TRIGGER_POS = None     # 广告触发位置，按 F1 记录
+CLOSE_POS = None          # 关闭按钮位置，按 F2 记录
+CLOSE_REF_IMG = None      # 关闭按钮参考图（广告未结束时的样子）
+CHECK_RADIUS = 20         # 关闭按钮周围检测半径（像素）
+DIFF_THRESHOLD = 300      # 差异阈值，越大越不容易误触
+MAX_WAIT_SECONDS = 60     # 最大等待秒数，超时强制点击
+POLL_INTERVAL = 1.0       # 检查间隔（秒）
+POST_CLICK_DELAY = 2.0    # 点击关闭后休眠（秒）
+# ================================================
+
+mouse = Controller()
+
+
+def show_tip(msg: str):
+    """显示提示并停留 1 秒"""
+    print(f"[提示] {msg}")
+    time.sleep(1)
+
+
+def capture_position(label: str):
+    print(f"[捕获] 将鼠标移动到 {label}，按 F 确认，F4 取消……")
+    while True:
+        if keyboard.is_pressed('f'):
+            pos = mouse.position
+            time.sleep(0.2)
+            print(f"[已记录] {label}: {pos}")
+            show_tip(f"{label} 记录成功")
+            return pos
+        if keyboard.is_pressed('f4'):
+            print("[已取消]")
+            return None
+        time.sleep(0.05)
+
+
+def capture_region(center_pos, radius=20):
+    x, y = center_pos
+    left = max(0, x - radius)
+    top = max(0, y - radius)
+    right = x + radius
+    bottom = y + radius
+    return np.array(ImageGrab.grab(bbox=(left, top, right, bottom)))
+
+
+def click_position(x: int, y: int):
+    pyautogui.click(x, y)
+    print(f"[点击] ({x}, {y})")
+
+
+def images_diff(img1, img2):
+    if img1.shape != img2.shape:
+        return float('inf')
+    return int(np.abs(img1.astype(int) - img2.astype(int)).sum())
+
+
+def run_cycle() -> bool:
+    global AD_TRIGGER_POS, CLOSE_POS, CLOSE_REF_IMG
+
+    if AD_TRIGGER_POS is None or CLOSE_POS is None:
+        print("[错误] 请先按 F1 和 F2 分别记录广告位置和关闭位置。")
+        return True
+
+    if CLOSE_REF_IMG is None:
+        print("[提示] 未检测到关闭按钮参考图，请再次将鼠标移到关闭按钮，按 F 记录参考图……")
+        CLOSE_REF_IMG = capture_region(CLOSE_POS, CHECK_RADIUS)
+
+    print(f"[循环] 点击广告: {AD_TRIGGER_POS}")
+    click_position(*AD_TRIGGER_POS)
+
+    print(f"[等待] 监测广告结束（最长等待 {MAX_WAIT_SECONDS} 秒）……")
+    start_time = time.time()
+    closed = False
+
+    while time.time() - start_time < MAX_WAIT_SECONDS:
+        if keyboard.is_pressed('f3'):
+            print("[停止] 用户中断循环。")
+            return False
+
+        current_img = capture_region(CLOSE_POS, CHECK_RADIUS)
+        diff = images_diff(CLOSE_REF_IMG, current_img)
+
+        if diff > DIFF_THRESHOLD:
+            print(f"[检测] 关闭按钮状态变化（差异值 {diff}），广告可能已结束。")
+            click_position(*CLOSE_POS)
+            closed = True
+            break
+
+        time.sleep(POLL_INTERVAL)
+
+    if not closed:
+        print(f"[超时] {MAX_WAIT_SECONDS} 秒内未检测到变化，强制点击关闭。")
+        click_position(*CLOSE_POS)
+
+    time.sleep(POST_CLICK_DELAY)
+    return True
+
+
+def main():
+    global AD_TRIGGER_POS, CLOSE_POS, CLOSE_REF_IMG
+    print("=== 智能倒计时自动点击助手 ===")
+    print("F1: 记录广告触发位置")
+    print("F2: 记录关闭按钮位置（并自动记录参考图）")
+    print("F3: 开始/暂停自动循环")
+    print("F4: 退出程序")
+    print("----------------------------------------")
+    print("原理：记录关闭按钮在广告未结束时的样子，")
+    print("      点击广告后自动监测该位置图像变化，")
+    print("      发现按钮状态改变（广告结束）即自动点击关闭。")
+    print("----------------------------------------")
+
+    running = False
+    while True:
+        if keyboard.is_pressed('f1'):
+            AD_TRIGGER_POS = capture_position("广告触发位置")
+            time.sleep(0.4)
+
+        elif keyboard.is_pressed('f2'):
+            CLOSE_POS = capture_position("关闭按钮位置")
+            CLOSE_REF_IMG = capture_region(CLOSE_POS, CHECK_RADIUS)
+            show_tip("关闭按钮位置记录成功")
+            time.sleep(0.4)
+
+        elif keyboard.is_pressed('f3'):
+            running = not running
+            status = "运行中" if running else "已暂停"
+            print(f"[状态] {status}")
+            show_tip(f"自动循环 {status}")
+            time.sleep(0.4)
+
+            if running:
+                while running:
+                    if not run_cycle():
+                        running = False
+                    if keyboard.is_pressed('f3'):
+                        running = False
+                        print("[状态] 已暂停")
+                        show_tip("自动循环 已暂停")
+                        time.sleep(0.4)
+
+        elif keyboard.is_pressed('f4'):
+            print("[退出]")
+            break
+
+        time.sleep(0.1)
+
+
+if __name__ == "__main__":
+    main()
