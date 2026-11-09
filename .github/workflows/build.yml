@@ -20,7 +20,7 @@ jobs:
 
       - name: 安装依赖库
         run: |
-          pip install pyautogui keyboard pynput numpy pillow pyinstaller
+          pip install pyautogui pynput numpy pillow pyinstaller
 
       - name: 打包 EXE
         run: |
